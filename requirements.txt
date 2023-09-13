@@ -1,2 +1,5 @@
 
 Biopython~=1.81
+
+jupyter~=1.0.0
+jupyter-contrib-nbextensions==0.7.0
