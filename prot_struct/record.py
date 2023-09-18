@@ -46,6 +46,17 @@ class UniProtRecord(ProtRecord):
             raise Exception
 
         return result_json
+    
+    def find_pdb_ids(self):
+
+        pdb_ids = set()
+
+        for ft in self.json["features"]:
+            for evidence in ft.get("evidences", []):
+                if evidence["source"]["name"] == "PDB":
+                    pdb_ids.add(evidence["source"]["id"])
+
+        return pdb_ids
 
 
 class PDBRecord(ProtRecord, ProtStructure):
