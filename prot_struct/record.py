@@ -1,11 +1,12 @@
 
 import abc
 import os
+import requests
 import urllib.request
 
 from Bio.PDB import PDBParser, Structure
 
-from .constants import PDB_URL, PDB_EXT
+from .constants import UNIPROT_URL, PDB_URL, PDB_EXT
 from .structure import ProtStructure
 
 
@@ -22,6 +23,29 @@ class ProtRecord(abc.ABC):
     def id(self) -> str:
 
         return self.prot_id
+    
+
+class UniProtRecord(ProtRecord):
+
+    def __init__(self, *args, **kwargs):
+
+        super().__init__(*args, **kwargs)
+
+        self.base_url = UNIPROT_URL
+        self.json = self._query_accession()
+
+        return
+
+    def _query_accession(self):
+
+        result = requests.get(self.base_url + self.prot_id)
+
+        if result.status_code == 200:
+            result_json = result.json()
+        else:
+            raise Exception
+
+        return result_json
 
 
 class PDBRecord(ProtRecord, ProtStructure):
@@ -46,6 +70,8 @@ class PDBRecord(ProtRecord, ProtStructure):
 
         if not os.path.exists(self.pdb_fp):
             urllib.request.urlretrieve(pdb_url, self.pdb_fp)
+
+        return
 
     def load_structure(self) -> Structure.Structure:
 
