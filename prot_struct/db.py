@@ -8,30 +8,30 @@ class ProtDatabase(abc.ABC):
 
     def __init__(self, download_loc: str = None):
 
-        self.download_loc = "" if download_loc is None else download_loc
+        self.download_loc = "./data/structures/pdb/" if download_loc is None else download_loc
         self.records = {}
         self.record_obj = None
 
         return
     
-    def pull_record(self, prot_id: str):
+    def pull_record(self, rec_id: str):
 
-        if prot_id in self.records.keys():
+        if rec_id in self.records.keys():
             return
 
-        self.records[prot_id] = self.record_obj(prot_id, self.download_loc)
+        self.records[rec_id] = self.record_obj(rec_id, self.download_loc)
 
         return
     
-    def get_record(self, prot_id: str, pull: bool = False) -> ProtRecord:
+    def get_record(self, rec_id: str, pull: bool = False) -> ProtRecord:
 
-        if prot_id not in self.records.keys():
+        if rec_id not in self.records.keys():
             if not pull:
-                raise KeyError(prot_id)
+                raise KeyError(rec_id)
             else:
-                self.pull_record(prot_id)
+                self.pull_record(rec_id)
 
-        return self.records[prot_id]
+        return self.records[rec_id]
     
 
 class UniProt(ProtDatabase):

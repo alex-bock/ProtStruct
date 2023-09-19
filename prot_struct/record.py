@@ -2,27 +2,33 @@
 import abc
 import os
 import requests
+from typing import List
 import urllib.request
 
 from Bio.PDB import PDBParser, Structure
 
-from .constants import UNIPROT_URL, PDB_URL, PDB_EXT
+from .constants import UNIPROT_URL, PDB_URL, PDB_EXT, RCSB_URL
 from .structure import ProtStructure
 
 
 class ProtRecord(abc.ABC):
 
-    def __init__(self, prot_id: str, loc: str):
+    def __init__(self, rec_id: str, loc: str):
 
-        self.prot_id = prot_id
+        self.rec_id = rec_id
         self.loc = loc
 
         return
+    
+    @abc.abstractmethod
+    def _query(self):
+
+        raise NotImplementedError
 
     @property
     def id(self) -> str:
 
-        return self.prot_id
+        return self.rec_id
     
 
 class UniProtRecord(ProtRecord):
@@ -32,31 +38,31 @@ class UniProtRecord(ProtRecord):
         super().__init__(*args, **kwargs)
 
         self.base_url = UNIPROT_URL
-        self.json = self._query_accession()
+
+        self._query()
 
         return
 
-    def _query_accession(self):
+    def _query(self):
 
-        result = requests.get(self.base_url + self.prot_id)
+        result = requests.get(self.base_url + self.rec_id)
 
-        if result.status_code == 200:
-            result_json = result.json()
-        else:
+        if result.status_code != 200:
             raise Exception
 
-        return result_json
+        self.json = result.json()
+
+        return
     
-    def find_pdb_ids(self):
+    def get_pdb_entry_ids(self) -> List[str]:
 
-        pdb_ids = set()
+        pdb_ids = [
+            evidence["source"]["id"] for ft in self.json["features"]
+            for evidence in ft.get("evidences", [])
+            if evidence["source"]["name"] == "PDB"
+        ]
 
-        for ft in self.json["features"]:
-            for evidence in ft.get("evidences", []):
-                if evidence["source"]["name"] == "PDB":
-                    pdb_ids.add(evidence["source"]["id"])
-
-        return pdb_ids
+        return set(pdb_ids)
 
 
 class PDBRecord(ProtRecord, ProtStructure):
@@ -65,17 +71,17 @@ class PDBRecord(ProtRecord, ProtStructure):
 
         super().__init__(*args, **kwargs)
 
-        self.pdb_fn = self.prot_id + PDB_EXT
+        self.pdb_fn = self.rec_id + PDB_EXT
         self.pdb_fp = os.path.join(self.loc, self.pdb_fn)
-        self.parser = PDBParser(QUIET=True)
+        self.pdb_parser = PDBParser(QUIET=True)
 
         self.base_url = PDB_URL
 
-        self._download_pdb_file()
+        self._query()
 
         return
 
-    def _download_pdb_file(self):
+    def _query(self):
 
         pdb_url = os.path.join(self.base_url, self.pdb_fn)
 
@@ -86,4 +92,34 @@ class PDBRecord(ProtRecord, ProtStructure):
 
     def load_structure(self) -> Structure.Structure:
 
-        return self.parser.get_structure(self.prot_id, self.pdb_fp)
+        return self.pdb_parser.get_structure(self.rec_id, self.pdb_fp)
+    
+    def get_entity_uniprot_ids(self) -> List[str]:
+
+        graphql_query = """
+            query {
+                entries(entry_ids:[\"""" + self.rec_id + """\"]){
+                    polymer_entities {
+                        rcsb_id
+                            rcsb_polymer_entity_container_identifiers {
+                                reference_sequence_identifiers {
+                                    database_accession
+                                    database_name
+                            }
+                        }
+                    }
+                }
+            }
+        """
+
+        result = requests.post(RCSB_URL, json={"query": graphql_query})
+
+        if result.status_code != 200:
+            raise Exception
+        
+        result_json = result.json()
+        uniprot_ids = {}
+        for polymer_entity in result_json["data"]["entries"][0]["polymer_entities"]:
+            uniprot_ids[polymer_entity["rcsb_id"]] = [ref_seq_id["database_accession"] for ref_seq_id in polymer_entity["rcsb_polymer_entity_container_identifiers"]["reference_sequence_identifiers"] if ref_seq_id["database_name"] == "UniProt"]
+
+        return uniprot_ids

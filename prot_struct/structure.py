@@ -18,8 +18,3 @@ class ProtStructure(abc.ABC):
     def load_structure(self) -> Structure.Structure:
 
         raise NotImplementedError
-
-    @property
-    def structure(self):
-
-        raise NotImplementedError
